@@ -1,0 +1,17 @@
+{
+  "sheetId": "",
+  "sheetName": "Applications",
+  "dashboardSheetName": "Dashboard",
+  "logSheetName": "Logs",
+  "dailySendLimit": 30,
+  "batchSize": 10,
+  "sendWindows": ["10:00", "13:00", "16:00"],
+  "activeDays": ["MON", "TUE", "WED", "THU", "FRI"],
+  "followUpEnabled": true,
+  "followUpAfterDays": 5,
+  "maxFollowUps": 1,
+  "retryAttempts": 3,
+  "retryDelayMs": 2000,
+  "dryRun": true,
+  "defaultTemplate": "generic"
+}

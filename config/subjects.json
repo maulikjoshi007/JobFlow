@@ -1,0 +1,28 @@
+{
+  "angular": [
+    "Application for {{jobTitle}} at {{company}}",
+    "Angular Developer interested in {{jobTitle}} - {{company}}",
+    "Experienced Angular Developer for your {{jobTitle}} role",
+    "Interest in {{company}}'s {{jobTitle}} opening"
+  ],
+  "frontend": [
+    "Front-End Developer application - {{jobTitle}} at {{company}}",
+    "Application for {{jobTitle}} - {{company}}",
+    "Interested in the {{jobTitle}} role at {{company}}"
+  ],
+  "meanstack": [
+    "Full-Stack Developer application - {{jobTitle}} at {{company}}",
+    "Application for {{jobTitle}} at {{company}}",
+    "MEAN Stack Developer interested in {{jobTitle}}"
+  ],
+  "generic": [
+    "Application for {{jobTitle}} at {{company}}",
+    "Interested in the {{jobTitle}} opening at {{company}}",
+    "Candidate for {{jobTitle}} - {{company}}"
+  ],
+  "followup": [
+    "Following up: {{jobTitle}} application at {{company}}",
+    "Quick follow-up on my {{jobTitle}} application",
+    "Checking in - {{jobTitle}} role at {{company}}"
+  ]
+}

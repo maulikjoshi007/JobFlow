@@ -1,0 +1,20 @@
+# Never commit real configuration containing personal data
+config/profile.json.local
+config/settings.json.local
+*.local.json
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/
+
+# Apps Script local dev (clasp)
+.clasp.json
+.clasprc.json
+node_modules/
+
+# Exported logs / temp artifacts
+*.log
+tmp/

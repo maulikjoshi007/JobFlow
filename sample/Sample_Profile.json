@@ -1,0 +1,10 @@
+{
+  "name": "Jane Doe",
+  "email": "jane.doe@example.com",
+  "phone": "+91 90000 00000",
+  "linkedin": "linkedin.com/in/janedoe",
+  "location": "Ahmedabad, Gujarat",
+  "experience": "5+ years",
+  "skills": "Angular, TypeScript, RxJS, NgRx, Node.js, REST APIs",
+  "resumeFileId": "1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789"
+}
