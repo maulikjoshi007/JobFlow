@@ -9,6 +9,7 @@
 
 var Scheduler = (function () {
   var DAILY_COUNT_PROP_PREFIX = 'JOBFLOW_SENT_COUNT_';
+  var LAST_TICK_AT_PROP = 'JOBFLOW_LAST_TICK_AT';
   var WINDOW_TOLERANCE_MINUTES = 15;
 
   function todayKey_() {
@@ -33,6 +34,20 @@ var Scheduler = (function () {
     var key = DAILY_COUNT_PROP_PREFIX + todayKey_();
     var current = getSentToday();
     props.setProperty(key, String(current + additional));
+  }
+
+  /**
+   * @return {Date|null} when the scheduler last actually ran (via the
+   *   trigger or a manual action that goes through tick()), or null if
+   *   it has never run in this script project.
+   */
+  function getLastTickAt() {
+    var value = PropertiesService.getScriptProperties().getProperty(LAST_TICK_AT_PROP);
+    return value ? new Date(Number(value)) : null;
+  }
+
+  function recordTick_() {
+    PropertiesService.getScriptProperties().setProperty(LAST_TICK_AT_PROP, String(Date.now()));
   }
 
   /**
@@ -66,6 +81,13 @@ var Scheduler = (function () {
    * to run a batch right now, then delegates to EmailService.
    */
   function tick() {
+    Utils.withLock(function () {
+      tickLocked_();
+    });
+  }
+
+  function tickLocked_() {
+    recordTick_();
     var settings;
     try {
       settings = Config.getSettings();
@@ -90,6 +112,8 @@ var Scheduler = (function () {
       return;
     }
 
+    ReplyDetectionService.checkReplies();
+
     JFLogger.info('Scheduler', 'Running batch', { sentToday: sentToday });
     var result = EmailService.runBatch(sentToday);
     addSentToday(result.sent);
@@ -101,6 +125,7 @@ var Scheduler = (function () {
   return {
     tick: tick,
     getSentToday: getSentToday,
-    addSentToday: addSentToday
+    addSentToday: addSentToday,
+    getLastTickAt: getLastTickAt
   };
 })();

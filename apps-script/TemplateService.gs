@@ -57,12 +57,19 @@ var TemplateService = (function () {
 
   /**
    * Strips HTML tags to build a reasonable plain-text fallback body.
+   * Anchor tags are converted to "text (url)" first, so link URLs (like
+   * a resume link) survive into the plain-text version instead of being
+   * silently discarded by the generic tag strip.
    * @param {string} html
    * @return {string}
    */
   function htmlToPlainText_(html) {
     return html
       .replace(/<style[\s\S]*?<\/style>/gi, '')
+      .replace(/<a\s+[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, function (match, href, text) {
+        var cleanText = text.replace(/<[^>]+>/g, '').trim();
+        return cleanText ? cleanText + ' (' + href + ')' : href;
+      })
       .replace(/<br\s*\/?>/gi, '\n')
       .replace(/<\/p>/gi, '\n\n')
       .replace(/<[^>]+>/g, '')
@@ -102,11 +109,19 @@ var TemplateService = (function () {
    * @param {string} templateName
    * @param {Object} profile
    * @param {Object} row
+   * @param {Object=} extra Additional computed placeholder values to
+   *   merge in (e.g. { resumeLink: 'https://...' }), for values that
+   *   aren't sourced from profile/row directly.
    * @return {{html: string, text: string}}
    */
-  function renderBody(templateName, profile, row) {
+  function renderBody(templateName, profile, row, extra) {
     var raw = loadRawTemplate_(templateName);
     var data = buildData_(profile, row);
+    if (extra) {
+      for (var key in extra) {
+        data[key] = extra[key];
+      }
+    }
     var html = render_(raw, data);
     var text = htmlToPlainText_(html);
     return { html: html, text: text };

@@ -34,10 +34,16 @@ Yes — drop a new `.html` file into your Drive templates folder and add its sub
 Gmail imposes its own daily sending caps depending on account type (see Google's official documentation, since limits can change). Set `dailySendLimit` comfortably below your account's actual cap to leave room for your normal personal email use.
 
 **Where do "Replies" get tracked on the Dashboard?**
-JobFlow does not read your inbox. Mark replies manually by editing a row's `Remarks` column (e.g. `Replied`) — a future roadmap item is automated reply detection via Gmail thread scanning.
+JobFlow scans the Gmail thread of every `Sent` row (via the `Thread Id` captured at send time) on every scheduler tick, before considering follow-ups. If the most recent message in the thread wasn't sent by you, the row is marked `Replied` and is permanently excluded from follow-up - the follow-up engine only ever considers rows still marked `Sent`. You can also trigger this manually anytime via **JobFlow → Check Replies Now**. Note: this treats any inbound message (including auto-replies/out-of-office) as a reply, since Apps Script can't reliably distinguish a human reply from an autoresponder - if that matters to you, review the `Replied` rows periodically and manually revert any false positives back to `Sent`.
 
 **I changed profile.json but the old data is still being used**
 Config is cached for 5 minutes per file to reduce Drive calls. Wait a few minutes, or run `Config.clearCache()` from the Apps Script editor for an immediate refresh.
+
+**Why does the first email link to my resume instead of attaching it?**
+An attachment on a cold first email is a well-known spam signal to mail filters. JobFlow sends a view-only Drive link (`{{resumeLink}}`) on the initial application, and switches to a real file attachment on the automatic follow-up, once a real conversation thread already exists. This is a template choice, not hardcoded - edit `templates/*.html` if you'd rather always attach.
+
+**"The resume file is not link-shared and JobFlow could not enable it automatically"**
+JobFlow tries to automatically set your resume file's sharing to "Anyone with the link - Viewer" the first time it's needed. If your Google account is on a Workspace domain with a policy blocking external link sharing, this fails and throws instead of silently sending a broken link. Fix: open the resume file in Drive → Share → change access to "Anyone with the link" → Viewer, manually. If your Workspace admin blocks this entirely, you'll need to switch the templates back to attachment-based sending instead.
 
 **Still stuck?**
 Open an issue using `.github/ISSUE_TEMPLATE.md` with your Execution log output (remove any personal data first).

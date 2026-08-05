@@ -15,6 +15,58 @@
     "Application for {{jobTitle}} at {{company}}",
     "MEAN Stack Developer interested in {{jobTitle}}"
   ],
+  "java": [
+    "Application for {{jobTitle}} at {{company}}",
+    "Experienced Java Developer | Application for {{jobTitle}}",
+    "Java Developer with 2.6+ Years Experience - {{company}}",
+    "Interested in {{jobTitle}} Opportunity at {{company}}",
+    "Application for Java Developer Position - {{company}}",
+    "Java Backend Developer Application for {{jobTitle}}",
+    "Seeking Java Developer Opportunity at {{company}}",
+    "Experienced Java Engineer | {{jobTitle}} Application"
+  ],
+
+  "springboot": [
+    "Spring Boot Developer Application - {{company}}",
+    "Application for {{jobTitle}} (Java Spring Boot)",
+    "Experienced Spring Boot Developer for {{company}}",
+    "Java Spring Boot Developer | {{jobTitle}}",
+    "Backend Developer (Spring Boot) Application",
+    "Spring Boot & REST API Developer Application",
+    "Application for Java Spring Boot Engineer",
+    "Interested in Spring Boot Developer Role at {{company}}"
+  ],
+
+  "backend": [
+    "Backend Developer Application - {{company}}",
+    "Application for {{jobTitle}} at {{company}}",
+    "Java Backend Engineer | {{company}}",
+    "Experienced Backend Developer for {{jobTitle}}",
+    "Application for Backend Java Developer",
+    "Java Backend Developer with Microservices Experience",
+    "Interested in Backend Developer Opportunity",
+    "Application for Software Engineer (Backend)"
+  ],
+
+  "microservices": [
+    "Java Microservices Developer Application",
+    "Application for {{jobTitle}} - Microservices Experience",
+    "Experienced Java Microservices Engineer",
+    "Backend Developer with Microservices Expertise",
+    "Java Backend & Microservices Developer",
+    "Application for Microservices Developer at {{company}}",
+    "Spring Boot & Microservices Developer Application",
+    "Interested in {{company}} Backend Opportunity"
+  ],
+
+  "softwareengineer": [
+    "Application for Software Engineer Position",
+    "Experienced Software Engineer - {{company}}",
+    "Application for {{jobTitle}} at {{company}}",
+    "Software Engineer with Java & Spring Boot Experience",
+    "Interested in Software Engineer Opportunity",
+    "Application for Software Development Engineer"
+  ],
   "generic": [
     "Application for {{jobTitle}} at {{company}}",
     "Interested in the {{jobTitle}} opening at {{company}}",
@@ -23,6 +75,7 @@
   "followup": [
     "Following up: {{jobTitle}} application at {{company}}",
     "Quick follow-up on my {{jobTitle}} application",
-    "Checking in - {{jobTitle}} role at {{company}}"
+    "Checking in - {{jobTitle}} role at {{company}}",
+     "Gentle Follow-Up for {{jobTitle}} Position"
   ]
 }

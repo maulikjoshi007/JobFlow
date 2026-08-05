@@ -20,7 +20,9 @@ var SheetService = (function () {
     sentDate: 'Sent Date',
     followUpDate: 'Follow Up Date',
     lastFollowUp: 'Last Follow Up',
-    remarks: 'Remarks'
+    remarks: 'Remarks',
+    threadId: 'Thread Id',
+    repliedDate: 'Replied Date'
   };
 
   var STATUS = {
@@ -28,8 +30,11 @@ var SheetService = (function () {
     SENT: 'Sent',
     FAILED: 'Failed',
     SKIPPED: 'Skipped',
-    FOLLOWED_UP: 'Followed Up'
+    FOLLOWED_UP: 'Followed Up',
+    REPLIED: 'Replied'
   };
+
+  var headerMapCache_ = null;
 
   /**
    * @return {GoogleAppsScript.Spreadsheet.Sheet}
@@ -46,15 +51,25 @@ var SheetService = (function () {
 
   /**
    * Builds a header-name -> column-index (1-based) map from row 1.
+   * Cached per-execution (module-level var resets fresh on every new
+   * script execution) - the header row doesn't change mid-run, so
+   * re-reading it from Sheets on every single row write (as this
+   * previously did) is pure wasted API latency. At ~380 rows, most of
+   * them hitting a skip/fail write path, that overhead alone was enough
+   * to exceed Apps Script's execution time limit.
    * @return {Object<string, number>}
    */
   function getHeaderMap_(sheet) {
+    if (headerMapCache_) return headerMapCache_;
+
     var headerRow = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
     var map = {};
     headerRow.forEach(function (header, idx) {
       map[String(header).trim()] = idx + 1;
     });
-    return map;
+
+    headerMapCache_ = map;
+    return headerMapCache_;
   }
 
   /**
@@ -115,26 +130,45 @@ var SheetService = (function () {
    * Marks a row as successfully sent.
    * @param {number} rowIndex
    * @param {number} followUpAfterDays
+   * @param {string=} threadId Gmail thread ID, used later for reply detection.
    */
-  function markSent(rowIndex, followUpAfterDays) {
+  function markSent(rowIndex, followUpAfterDays, threadId) {
     var today = new Date();
     updateRow(rowIndex, {
       status: STATUS.SENT,
       sentDate: today,
       followUpDate: Utils.addDays(today, followUpAfterDays),
-      remarks: ''
+      remarks: '',
+      threadId: threadId || ''
+    });
+  }
+
+  /**
+   * Marks a row as replied - this removes it from follow-up eligibility
+   * for good, since isFollowUpDue_ only checks Status === Sent.
+   * @param {number} rowIndex
+   */
+  function markReplied(rowIndex) {
+    updateRow(rowIndex, {
+      status: STATUS.REPLIED,
+      repliedDate: new Date()
     });
   }
 
   /**
    * Marks a row as followed up.
    * @param {number} rowIndex
+   * @param {string=} threadId Only needed if the follow-up created a new
+   *   thread (fallback path); a real in-thread reply keeps the same
+   *   Thread Id, so this is a no-op update in that case.
    */
-  function markFollowedUp(rowIndex) {
-    updateRow(rowIndex, {
+  function markFollowedUp(rowIndex, threadId) {
+    var fields = {
       status: STATUS.FOLLOWED_UP,
       lastFollowUp: new Date()
-    });
+    };
+    if (threadId) fields.threadId = threadId;
+    updateRow(rowIndex, fields);
   }
 
   /**
@@ -169,6 +203,7 @@ var SheetService = (function () {
     markSent: markSent,
     markFollowedUp: markFollowedUp,
     markFailed: markFailed,
-    markSkipped: markSkipped
+    markSkipped: markSkipped,
+    markReplied: markReplied
   };
 })();

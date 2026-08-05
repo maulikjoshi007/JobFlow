@@ -101,3 +101,26 @@ function jobflow_runAllTests() {
 
   return summary;
 }
+
+/**
+ * TC12 helper: deliberately holds the script lock for a fixed window so
+ * you can reliably test concurrent-execution protection, instead of
+ * depending on real batch timing (which varies and is hard to time by
+ * hand). Run this from the Apps Script editor's Run button, then -
+ * WHILE it's still showing "Running..." in the editor - trigger any
+ * other lock-guarded action (e.g. JobFlow -> Run Batch Now from the
+ * Sheet menu). The second call should log "Could not acquire lock" in
+ * the Logs sheet and exit without doing anything, confirming the lock
+ * actually works under real concurrency.
+ * @param {number=} holdSeconds How long to hold the lock (default 30s -
+ *   long enough to comfortably switch tabs and click the menu).
+ */
+function jobflow_testLockHold(holdSeconds) {
+  var seconds = holdSeconds || 90;
+  return Utils.withLock(function () {
+    JFLogger.info('Test', 'jobflow_testLockHold: lock acquired, holding for ' + seconds + 's - try triggering another action now');
+    Utils.sleep(seconds * 1000);
+    JFLogger.info('Test', 'jobflow_testLockHold: releasing lock now');
+    return { held: true, seconds: seconds };
+  });
+}
