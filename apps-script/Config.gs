@@ -102,7 +102,8 @@ var Config = (function () {
       retryDelayMs: 2000,
       dryRun: false,
       logSheetName: 'Logs',
-      defaultTemplate: 'generic'
+      defaultTemplate: 'generic',
+      attachResumeOnInitialSend: false
     };
     var settings = loadJsonFile_('settings.json');
     for (var key in defaults) {
@@ -115,10 +116,22 @@ var Config = (function () {
     }
 
     // Allow a temporary, script-property-based override to force dry-run
-    // mode for a single manual test invocation (see Main.gs jobflow_runDryRun).
-    var forceDryRun = PropertiesService.getScriptProperties().getProperty('JOBFLOW_FORCE_DRY_RUN');
-    if (forceDryRun === 'true') {
-      settings.dryRun = true;
+    // mode for a single manual test invocation (see Main.gs
+    // jobflow_runDryRun). Stored as a timestamp rather than a plain
+    // 'true' flag and self-expires after a few minutes - this matters
+    // because if the execution that set it gets killed by Apps Script's
+    // execution time limit before reaching its cleanup step, a plain
+    // sticky boolean would silently force EVERY subsequent run
+    // (including real production sends) into dry-run mode indefinitely,
+    // with no visible error. A short expiry window makes that failure
+    // mode self-heal instead.
+    var FORCE_DRY_RUN_MAX_AGE_MS = 10 * 60 * 1000; // 10 minutes
+    var forceDryRunSetAt = PropertiesService.getScriptProperties().getProperty('JOBFLOW_FORCE_DRY_RUN_AT');
+    if (forceDryRunSetAt) {
+      var age = Date.now() - Number(forceDryRunSetAt);
+      if (age >= 0 && age < FORCE_DRY_RUN_MAX_AGE_MS) {
+        settings.dryRun = true;
+      }
     }
 
     return settings;

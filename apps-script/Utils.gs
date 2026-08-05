@@ -119,6 +119,31 @@ var Utils = (function () {
     return letter;
   }
 
+  /**
+   * Runs a function while holding the script-wide lock, so it can never
+   * overlap with another locked run (e.g. a scheduled trigger tick firing
+   * while a manual menu action is in progress). Returns null (and logs a
+   * warning) instead of running if the lock can't be acquired in time.
+   * @param {Function} fn
+   * @param {number=} timeoutMs
+   * @return {*}
+   */
+  function withLock(fn, timeoutMs) {
+    var lock = LockService.getScriptLock();
+    var gotLock = lock.tryLock(timeoutMs || 5000);
+
+    if (!gotLock) {
+      Logger.log('[WARN] [Utils] Could not acquire lock - another JobFlow run is already in progress.');
+      return null;
+    }
+
+    try {
+      return fn();
+    } finally {
+      lock.releaseLock();
+    }
+  }
+
   return {
     getTodayCode: getTodayCode,
     formatDate: formatDate,
@@ -128,6 +153,7 @@ var Utils = (function () {
     randomChoice: randomChoice,
     sleep: sleep,
     retry: retry,
-    columnToLetter: columnToLetter
+    columnToLetter: columnToLetter,
+    withLock: withLock
   };
 })();
