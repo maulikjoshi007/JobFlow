@@ -97,6 +97,19 @@ var EmailService = (function () {
    * on your OWN sent message replies to yourself, not the recipient.
    * .reply() is only correct for messages you received, not ones you
    * sent - there is no received message yet at follow-up time.
+   *
+   * Preferred path: a TRUE RFC-threaded reply via the Gmail advanced
+   * service - constructs a raw MIME message with In-Reply-To/References
+   * headers pointing at the original message, and sends it with an
+   * explicit threadId, so Gmail guarantees it lands in the same
+   * conversation regardless of the recipient's email provider (not a
+   * subject-matching heuristic). Requires the "Gmail API" advanced
+   * service to be enabled in this Apps Script project (Services -> +
+   * -> Gmail API). Falls back automatically to a subject-based new
+   * email (Re: [subject], works reliably for Gmail-to-Gmail threads via
+   * Gmail's own matching, not guaranteed for other providers) if the
+   * service isn't enabled, or if the threaded send fails for any
+   * reason.
    * @param {Object} row
    * @param {Object} profile
    * @param {Object} settings
@@ -113,20 +126,30 @@ var EmailService = (function () {
     }
 
     var subject = TemplateService.pickSubject(templateName, profile, row);
+    var originalMessageId = null;
+
     if (row.threadId) {
       try {
-        var originalSubject = GmailApp.getThreadById(row.threadId).getMessages()[0].getSubject();
+        var originalMessage = GmailApp.getThreadById(row.threadId).getMessages()[0];
+        var originalSubject = originalMessage.getSubject();
         subject = /^re:/i.test(originalSubject) ? originalSubject : 'Re: ' + originalSubject;
+        originalMessageId = originalMessage.getHeader('Message-ID');
       } catch (e) {
-        JFLogger.warn('EmailService', 'Could not read original subject for follow-up, using rotated subject instead', {
+        JFLogger.warn('EmailService', 'Could not read original message for follow-up threading', {
           row: row._rowIndex,
           error: e.message
         });
       }
     }
 
+    var willUseThreadedReply = originalMessageId && row.threadId && typeof Gmail !== 'undefined';
+
     if (settings.dryRun) {
-      JFLogger.info('EmailService', 'DRY RUN - would send follow-up', { to: row.email, subject: subject });
+      JFLogger.info('EmailService', 'DRY RUN - would send follow-up', {
+        to: row.email,
+        subject: subject,
+        mode: willUseThreadedReply ? 'true threaded reply (Gmail API)' : 'new email (subject-based)'
+      });
       return { ok: true, reason: 'dry-run', threadId: row.threadId };
     }
 
@@ -137,6 +160,23 @@ var EmailService = (function () {
       return { ok: false, reason: e.message };
     }
 
+    if (willUseThreadedReply) {
+      try {
+        var raw = buildRawMimeReply_(row.email, subject, body, profile, originalMessageId, resumeBlob);
+        Utils.retry(function () {
+          Gmail.Users.Messages.send({ raw: raw, threadId: row.threadId }, 'me');
+        }, settings.retryAttempts, settings.retryDelayMs);
+
+        return { ok: true, reason: '', threadId: row.threadId };
+      } catch (e) {
+        JFLogger.warn('EmailService', 'Threaded follow-up via Gmail API failed, falling back to a new email', {
+          row: row._rowIndex,
+          error: e.message
+        });
+      }
+    }
+
+    // Fallback: subject-based new email.
     try {
       var sentMessage = Utils.retry(function () {
         var draft = GmailApp.createDraft(row.email, subject, body.text, {
@@ -152,6 +192,62 @@ var EmailService = (function () {
     } catch (e) {
       return { ok: false, reason: 'Follow-up send failed: ' + e.message };
     }
+  }
+
+  /**
+   * Builds a base64url-encoded raw MIME message for a true threaded
+   * reply: multipart/mixed containing a multipart/alternative body
+   * (plain text + HTML) and the resume as an attachment, with
+   * In-Reply-To/References headers set to the original message's ID.
+   * @param {string} to
+   * @param {string} subject
+   * @param {{html: string, text: string}} body
+   * @param {Object} profile
+   * @param {string} inReplyToMessageId Raw Message-ID header value (with angle brackets).
+   * @param {GoogleAppsScript.Base.Blob} resumeBlob
+   * @return {string} base64url-encoded raw MIME message
+   */
+  function buildRawMimeReply_(to, subject, body, profile, inReplyToMessageId, resumeBlob) {
+    var boundaryMixed = 'mixed_' + Utilities.getUuid().replace(/-/g, '');
+    var boundaryAlt = 'alt_' + Utilities.getUuid().replace(/-/g, '');
+
+    var headerLines = [
+      'To: ' + to,
+      'From: ' + profile.name + ' <' + profile.email + '>',
+      'Reply-To: ' + profile.email,
+      'Subject: ' + subject,
+      'In-Reply-To: ' + inReplyToMessageId,
+      'References: ' + inReplyToMessageId,
+      'MIME-Version: 1.0',
+      'Content-Type: multipart/mixed; boundary="' + boundaryMixed + '"'
+    ].join('\r\n');
+
+    var altPart =
+      '--' + boundaryMixed + '\r\n' +
+      'Content-Type: multipart/alternative; boundary="' + boundaryAlt + '"\r\n\r\n' +
+      '--' + boundaryAlt + '\r\n' +
+      'Content-Type: text/plain; charset="UTF-8"\r\n\r\n' +
+      body.text + '\r\n\r\n' +
+      '--' + boundaryAlt + '\r\n' +
+      'Content-Type: text/html; charset="UTF-8"\r\n\r\n' +
+      body.html + '\r\n\r\n' +
+      '--' + boundaryAlt + '--\r\n';
+
+    var attachmentPart = '';
+    if (resumeBlob) {
+      var base64Data = Utilities.base64Encode(resumeBlob.getBytes());
+      var chunked = base64Data.match(/.{1,76}/g).join('\r\n');
+      attachmentPart =
+        '--' + boundaryMixed + '\r\n' +
+        'Content-Type: ' + resumeBlob.getContentType() + '; name="' + resumeBlob.getName() + '"\r\n' +
+        'Content-Disposition: attachment; filename="' + resumeBlob.getName() + '"\r\n' +
+        'Content-Transfer-Encoding: base64\r\n\r\n' +
+        chunked + '\r\n';
+    }
+
+    var mime = headerLines + '\r\n\r\n' + altPart + attachmentPart + '--' + boundaryMixed + '--';
+
+    return Utilities.base64EncodeWebSafe(mime).replace(/=+$/, '');
   }
 
   /**
@@ -237,7 +333,14 @@ var EmailService = (function () {
       }
 
       if (result.ok) {
-        if (isFollowUp) {
+        if (settings.dryRun) {
+          // Dry run: sendForRow_/sendFollowUpForRow_ already logged the
+          // "DRY RUN - would send..." detail. Count it for the returned
+          // summary only - do NOT touch the sheet, the duplicate-email
+          // guard, or anything else that should only happen on a real
+          // send. This was previously missing and caused dry runs to
+          // silently mark rows as Sent in the real sheet.
+        } else if (isFollowUp) {
           SheetService.markFollowedUp(row._rowIndex, result.threadId);
           JFLogger.success('EmailService', 'Follow-up sent', { to: row.email, company: row.company });
         } else {
@@ -253,7 +356,7 @@ var EmailService = (function () {
       }
     }
 
-    return counters;
+    return { sent: counters.sent, failed: counters.failed, skipped: counters.skipped, dryRun: settings.dryRun };
   }
 
   return {

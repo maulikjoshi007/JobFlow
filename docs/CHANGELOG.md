@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.2.0]
+
+### Added
+- **True RFC-threaded follow-up replies** via the optional Gmail advanced API service - constructs a raw MIME message with `In-Reply-To`/`References` headers and an explicit `threadId`, guaranteeing the follow-up lands in the same conversation regardless of the recipient's email provider (not a subject-matching heuristic). Falls back automatically to the previous subject-based approach if the Gmail API service isn't enabled in the project. One-time optional setup: Apps Script editor → Services → add "Gmail API" (see `docs/INSTALL.md` Step 7).
+- `jobflow_diagnostics()` — one-call report of the true effective `dryRun` state, any active force-dry-run override (and its age), and the real persisted daily-send counter, for troubleshooting without guessing.
+- `jobflow_listConfigFiles()` — lists every file matching each config filename in the Drive config folder, surfacing duplicate-named files directly.
+- `jobflow_adjustTodaysSentCount(correctCount)` — recovery tool to manually correct the persisted daily-send counter if it's ever inflated by a bug or bad test run.
+
+### Fixed
+- **Critical**: dry-run mode could write real Sheet status changes (`markSent`/`markFollowedUp`) and inflate the real persisted daily-send counter, even though no email was ever actually sent - meaning a dry-run test (or an accidentally-forced dry-run during real automation) could falsely mark real rows as contacted and block legitimate sending for the rest of the day. Dry-run is now fully non-mutating: no Sheet writes, no counter changes, regardless of how dry-run mode was triggered.
+- **Duplicate config files silently serving stale settings**: Drive allows multiple files with the same name in one folder, and `getFilesByName()`'s match order isn't controllable - if an old `settings.json` was never deleted after uploading a replacement, edits to the new file could have no effect at all, since the code might keep reading the old one. `loadJsonFile_` now detects and logs a warning when duplicates exist.
+- **Counter corruption from argument-taking functions run via the editor dropdown**: `jobflow_adjustTodaysSentCount(correctCount)` is designed to take an argument, but the Apps Script editor's Run button always calls the selected function with zero arguments - which previously wrote the literal string `"NaN"` into the persisted daily-send counter, silently breaking every batch-limit comparison downstream (NaN comparisons are always false, so batches would process 0 rows with no visible error). Fixed with defense in depth: `Scheduler.setSentToday()` now validates its input and rejects anything that isn't a real, non-negative number, leaving the counter untouched and logging an error; `Scheduler.getSentToday()` now detects an already-corrupted stored value on read and self-heals it back to `0`; `jobflow_adjustTodaysSentCount()` now surfaces a clear, actionable error (including a reminder to use a small wrapper function, since it cannot be run directly from the editor dropdown) instead of failing silently.
+
 ## [1.1.0]
 
 ### Added
@@ -34,7 +47,6 @@ All notable changes to this project are documented here. Format loosely follows 
 ### Changed
 - **Initial-send resume delivery**: defaults to a view-only Drive link instead of a file attachment (attachments on a cold first email are a known spam/gateway-scrutiny signal). Added `attachResumeOnInitialSend` setting to opt back into real attachments if preferred — either way, the email wording adapts automatically via the new `{{resumeMention}}` placeholder. Follow-ups always attach the real file, unaffected by this setting.
 - Rewrote `templates/angular.html` using a content structure validated via mail-tester.com (9.5/10, 8.9/10 on two independent runs): immediate role/company mention, specific-tool bullet list, one non-technical value line, brief resume reference and close. Documented as a reusable formula in `docs/CONFIGURATION.md`.
-- Added `jobflow_backfillThreadIds` — one-time helper to retroactively find and attach a Thread Id to `Sent` rows that predate thread tracking, so reply detection can cover them.
 
 ## [1.0.0] - Initial Release
 

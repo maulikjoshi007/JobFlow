@@ -22,7 +22,14 @@ var Scheduler = (function () {
   function getSentToday() {
     var props = PropertiesService.getScriptProperties();
     var value = props.getProperty(DAILY_COUNT_PROP_PREFIX + todayKey_());
-    return value ? parseInt(value, 10) : 0;
+    if (!value) return 0;
+    var parsed = parseInt(value, 10);
+    if (!isFinite(parsed) || parsed < 0) {
+      Logger.log('[WARN] [Scheduler] Corrupted daily counter value "' + value + '" found - resetting to 0.');
+      setSentToday(0);
+      return 0;
+    }
+    return parsed;
   }
 
   /**
@@ -34,6 +41,28 @@ var Scheduler = (function () {
     var key = DAILY_COUNT_PROP_PREFIX + todayKey_();
     var current = getSentToday();
     props.setProperty(key, String(current + additional));
+  }
+
+  /**
+   * Manually overrides today's persisted sent count. Recovery tool - use
+   * this to correct the counter after it was inflated by a bug (or any
+   * other manual correction needed), not as part of normal operation.
+   * Validates the input defensively - a bad value here (e.g. calling
+   * this from the Apps Script editor's Run button with no argument,
+   * which passes undefined) would otherwise corrupt the counter to NaN,
+   * which silently breaks every batch-limit calculation downstream.
+   * @param {number} count
+   * @return {boolean} true if the value was valid and applied
+   */
+  function setSentToday(count) {
+    var num = Number(count);
+    if (!isFinite(num) || num < 0) {
+      Logger.log('[ERROR] [Scheduler] setSentToday rejected invalid value: ' + count + ' (counter left unchanged)');
+      return false;
+    }
+    var props = PropertiesService.getScriptProperties();
+    props.setProperty(DAILY_COUNT_PROP_PREFIX + todayKey_(), String(Math.round(num)));
+    return true;
   }
 
   /**
@@ -116,9 +145,14 @@ var Scheduler = (function () {
 
     JFLogger.info('Scheduler', 'Running batch', { sentToday: sentToday });
     var result = EmailService.runBatch(sentToday);
-    addSentToday(result.sent);
 
-    JFLogger.info('Scheduler', 'Batch complete', result);
+    if (result.dryRun) {
+      JFLogger.info('Scheduler', 'Batch was a dry run - daily counter NOT incremented, no rows were changed.', result);
+    } else {
+      addSentToday(result.sent);
+      JFLogger.info('Scheduler', 'Batch complete', result);
+    }
+
     Dashboard.refresh();
   }
 
@@ -126,6 +160,7 @@ var Scheduler = (function () {
     tick: tick,
     getSentToday: getSentToday,
     addSentToday: addSentToday,
+    setSentToday: setSentToday,
     getLastTickAt: getLastTickAt
   };
 })();

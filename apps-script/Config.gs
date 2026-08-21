@@ -56,6 +56,19 @@ var Config = (function () {
     }
 
     var file = files.next();
+
+    // If a second file with the same name exists in this folder, Drive's
+    // getFilesByName() order isn't something you control - edits could
+    // be landing on a file that's never actually read. Surface this
+    // loudly rather than silently reading the wrong one.
+    if (files.hasNext()) {
+      Logger.log(
+        '[WARN] [Config] Multiple files named "' + fileName + '" found in the config folder. ' +
+        'Currently reading fileId=' + file.getId() + ', last updated ' + file.getLastUpdated() +
+        '. Delete the duplicate(s) to avoid editing a file that is never actually loaded.'
+      );
+    }
+
     var content = file.getBlob().getDataAsString('UTF-8');
     var parsed;
 

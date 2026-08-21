@@ -68,10 +68,17 @@ function jobflow_runBatchNow() {
   return Utils.withLock(function () {
     var sentToday = Scheduler.getSentToday();
     var result = EmailService.runBatch(sentToday);
-    Scheduler.addSentToday(result.sent);
+
+    if (!result.dryRun) {
+      Scheduler.addSentToday(result.sent);
+    }
+
     Dashboard.refresh();
     JFLogger.info('Main', 'Manual batch run complete', result);
-    showAlertOrLog_('Batch complete. Sent: ' + result.sent + ', Failed: ' + result.failed + ', Skipped: ' + result.skipped);
+    showAlertOrLog_(
+      (result.dryRun ? 'DRY RUN - nothing was actually sent. ' : '') +
+      'Batch complete. Sent: ' + result.sent + ', Failed: ' + result.failed + ', Skipped: ' + result.skipped
+    );
     return result;
   });
 }
@@ -263,6 +270,120 @@ function jobflow_clearStuckDryRunFlag() {
   JFLogger.warn('Main', 'Cleared a force-dry-run override that was active', { ageMinutes: ageMinutes });
   showAlertOrLog_('Cleared a force-dry-run override that had been active for ~' + ageMinutes + ' minute(s). settings.json\'s dryRun value is now in full effect.');
   return { wasActive: true, ageMinutes: ageMinutes };
+}
+
+/**
+ * Recovery tool: manually corrects today's persisted sent-count if it
+ * was ever inflated by a bug or bad test run. Also refreshes the
+ * Dashboard so the correction is immediately visible.
+ *
+ * IMPORTANT: this takes an argument, so it CANNOT be run directly from
+ * the Apps Script editor's Run button/dropdown (that always calls
+ * functions with zero arguments, which previously corrupted the
+ * counter to NaN). Use a small wrapper instead:
+ *
+ *   function TEMP_fixCounter() { jobflow_adjustTodaysSentCount(10); }
+ *
+ * ...then run TEMP_fixCounter from the dropdown.
+ *
+ * @param {number} correctCount The actual real number of emails sent
+ *   today.
+ */
+function jobflow_adjustTodaysSentCount(correctCount) {
+  var applied = Scheduler.setSentToday(correctCount);
+
+  if (!applied) {
+    showAlertOrLog_(
+      'REJECTED: "' + correctCount + '" is not a valid count - counter left unchanged. ' +
+      'This function needs an argument and cannot be run directly from the editor dropdown; ' +
+      'use a small wrapper function instead (see the JSDoc comment above this function).'
+    );
+    return false;
+  }
+
+  Dashboard.refresh();
+  showAlertOrLog_("Today's sent count set to " + correctCount + '.');
+  return true;
+}
+
+/**
+ * Diagnostic: reports the true current state of everything involved in
+ * this session's dry-run/counter confusion, in one place, so guessing
+ * isn't needed - the raw settings.json value, whether a force-dry-run
+ * override is active (and its age), the resolved effective dryRun value
+ * Config.getSettings() actually returns, and the real persisted daily
+ * counter.
+ */
+function jobflow_diagnostics() {
+  var props = PropertiesService.getScriptProperties();
+  var forceDryRunAt = props.getProperty('JOBFLOW_FORCE_DRY_RUN_AT');
+  var forceDryRunActive = false;
+  var forceDryRunAgeSec = null;
+  if (forceDryRunAt) {
+    forceDryRunAgeSec = Math.round((Date.now() - Number(forceDryRunAt)) / 1000);
+    forceDryRunActive = forceDryRunAgeSec >= 0 && forceDryRunAgeSec < 600; // 10 min
+  }
+
+  Config.clearCache();
+  var effectiveSettings = Config.getSettings();
+
+  var report = {
+    forceDryRunFlagPresent: !!forceDryRunAt,
+    forceDryRunFlagAgeSeconds: forceDryRunAgeSec,
+    forceDryRunCurrentlyActive: forceDryRunActive,
+    effectiveDryRun: effectiveSettings.dryRun,
+    realPersistedSentCountToday: Scheduler.getSentToday(),
+    dailySendLimit: effectiveSettings.dailySendLimit
+  };
+
+  JFLogger.info('Main', 'Diagnostics', report);
+  showAlertOrLog_(
+    'effectiveDryRun: ' + report.effectiveDryRun +
+    ' | forceFlagActive: ' + report.forceDryRunCurrentlyActive +
+    ' (age: ' + report.forceDryRunFlagAgeSeconds + 's)' +
+    ' | realSentToday: ' + report.realPersistedSentCountToday + '/' + report.dailySendLimit
+  );
+  return report;
+}
+
+/**
+ * Diagnostic: lists every file matching each config filename in the
+ * config folder, with ID and last-updated time. If any name has more
+ * than one match, that's very likely why an edit "isn't taking effect" -
+ * the code may be reading a different (older) file than the one you're
+ * editing. Run this alongside jobflow_diagnostics when settings.json
+ * edits don't seem to apply.
+ */
+function jobflow_listConfigFiles() {
+  var props = PropertiesService.getScriptProperties();
+  var folderId = props.getProperty('CONFIG_FOLDER_ID');
+  if (!folderId) {
+    showAlertOrLog_('CONFIG_FOLDER_ID is not set in Script Properties.');
+    return;
+  }
+
+  var folder = DriveApp.getFolderById(folderId);
+  var names = ['profile.json', 'settings.json', 'subjects.json'];
+  var report = [];
+
+  names.forEach(function (name) {
+    var files = folder.getFilesByName(name);
+    var matches = [];
+    while (files.hasNext()) {
+      var f = files.next();
+      matches.push({ id: f.getId(), lastUpdated: f.getLastUpdated().toString() });
+    }
+    report.push({ name: name, matchCount: matches.length, matches: matches });
+  });
+
+  JFLogger.info('Main', 'Config file listing', report);
+
+  var summary = report.map(function (r) {
+    return r.name + ': ' + r.matchCount + ' file(s) found' + (r.matchCount > 1 ? ' -- DUPLICATE, this is likely your problem' : '');
+  }).join(' | ');
+
+  showAlertOrLog_(summary);
+  return report;
 }
 
 /**
