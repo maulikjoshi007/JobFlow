@@ -71,7 +71,17 @@ This guide walks through installing JobFlow from zero to a working, automated pi
 2. Google will prompt you to authorize the script (Gmail send, Sheets, Drive scopes). Review and accept — this is normal for any script that sends email or reads Drive on your behalf.
 3. Check **Executions** (left sidebar) for the run log, and check the `Logs` tab that JobFlow created in your Sheet — you should see `DRY RUN` entries and no real emails sent.
 
-## Step 7 — Go Live
+## Step 7 (Optional but Recommended) — Enable True Threaded Follow-Ups
+
+By default, follow-up emails send as a new message with `Re: [subject]`, which Gmail usually (not always) groups into the original conversation automatically. For a guaranteed, RFC-correct threaded reply regardless of the recipient's email provider:
+
+1. In the Apps Script editor, click **Services** (the `+` icon in the left sidebar).
+2. Find **Gmail API** in the list, click **Add**.
+3. That's it — no code change needed. `EmailService.gs` automatically detects the service is available and uses true threaded replies; if you skip this step, it automatically falls back to the subject-based approach instead, with no error.
+
+You can verify which mode is active by checking the `Logs` sheet after a follow-up send/dry-run — it logs `"true threaded reply (Gmail API)"` or `"new email (subject-based)"` explicitly.
+
+## Step 8 — Go Live
 
 1. Reload the Google Sheet tab in your browser so the **JobFlow** custom menu appears (created by `onOpen()`).
 2. In `settings.json` (in Drive), set `"dryRun": false` once you're confident everything is configured correctly.
